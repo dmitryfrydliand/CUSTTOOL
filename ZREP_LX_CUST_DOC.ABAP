@@ -15,9 +15,17 @@
 *&
 *&
 *&---------------------- Version History ------------------------------*
-*& v.001 17.11.2017 - Initial version
+*& v.001 17.11.2017 - Version 1.0
 *&
 *&
+*&
+*&
+*&
+*&
+*&---------------------------------------------------------------------*
+*& v.002 11.12.2017 - Version 2.0
+*& Help from SPRO is displayed in the document for the views and
+*& view clusters where found
 *&
 *&
 *&
@@ -49,14 +57,80 @@ CONSTANTS:
   gc_sel_screen_input_title  TYPE string VALUE 'Input' ##NO_TEXT,
   gc_sel_screen_output_title TYPE string VALUE 'Output' ##NO_TEXT,
   gc_sel_screen_so_req       TYPE string VALUE 'Transport requests' ##NO_TEXT,
-  gc_sel_screen_p_templ      TYPE string VALUE '�ust. Doc. template' ##NO_TEXT,
+  gc_sel_screen_p_templ      TYPE string VALUE 'Сust. Doc. template' ##NO_TEXT,
   gc_sel_screen_p_path       TYPE string VALUE 'Cust. Doc. result' ##NO_TEXT,
   gc_sel_screen_p_lang       TYPE string VALUE 'Language' ##NO_TEXT,
 
-  gc_default_lang            TYPE spras   VALUE 'E' ##NO_TEXT.
+  gc_default_lang            TYPE spras   VALUE 'E' ##NO_TEXT,
+  gc_spro_documentation      TYPE string  VALUE 'SPRO Documentation' ##NO_TEXT.
 
 
 
+CLASS zlx_cl_spro_doc_loader DEFINITION
+  FINAL
+  CREATE PRIVATE .
+
+  PUBLIC SECTION.
+
+    TYPES ty_t_tline TYPE TABLE OF tline.
+
+    TYPES: BEGIN OF ty_s_itf_lines,
+             format TYPE tdformat,
+             line   TYPE string,
+           END OF ty_s_itf_lines.
+
+    TYPES ty_t_itf_lines TYPE TABLE OF ty_s_itf_lines.
+
+
+    CLASS-METHODS get_instance
+      RETURNING
+        VALUE(ro_instance) TYPE REF TO zlx_cl_spro_doc_loader .
+    METHODS get_documentation
+      IMPORTING
+        !iv_obj_name      TYPE trobj_name
+        !iv_lang          TYPE spras DEFAULT 'E'
+      EXPORTING
+        !es_head          TYPE thead
+        !et_documentation TYPE ty_t_itf_lines.
+    METHODS set_tr_request
+      IMPORTING
+        !ir_transport_req TYPE rseloption .
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+
+    DATA mv_current_lang TYPE spras .
+    DATA mt_tr_request TYPE rseloption .
+    CLASS-DATA mo_instance TYPE REF TO zlx_cl_spro_doc_loader .
+
+    METHODS remove_links
+      CHANGING
+        !ct_documentation TYPE ty_t_itf_lines.
+    METHODS get_listalpha
+      CHANGING
+        !cv_count TYPE sytabix
+        !cv_alpha TYPE c .
+    METHODS get_list_number
+      CHANGING
+        !cv_number_count TYPE sytabix
+        !cv_number       TYPE c .
+    METHODS prepare_itf
+      IMPORTING
+        !is_header_txt TYPE thead
+      CHANGING
+        !ct_itf_text   TYPE ty_t_tline .
+    METHODS remove_lz_in_tables
+      CHANGING
+        !ct_lines TYPE ty_t_tline .
+    METHODS transform_new_old
+      IMPORTING
+        !iv_doc_class  TYPE doku_class
+        !iv_doc_name   TYPE doku_obj
+      CHANGING
+        !cv_doc_id     TYPE doku_id
+        !cv_doc_object TYPE doku_obj
+        !cv_doc_type   TYPE doku_typ .
+    METHODS constructor .
+ENDCLASS.
 
 CLASS cl_word DEFINITION FINAL.
 
@@ -79,7 +153,7 @@ CLASS cl_word DEFINITION FINAL.
       c_field_creationdate           TYPE string VALUE '##FIELD#CREATEDATE##',
       c_field_moddate                TYPE string VALUE '##FIELD#SAVEDATE##',
       c_field_todaydate              TYPE string VALUE '##FIELD#DATE##',
-      c_field_filename               TYPE string VALUE '##FIELD#FILENAME##',
+      c_field_filename               TYPE string VALUE '##FIELD#FIELNAME##',
 * Anchor for label
       c_label_anchor                 TYPE string VALUE '##LABEL##',
 * Prefix for SAPWR url
@@ -108,7 +182,7 @@ CLASS cl_word DEFINITION FINAL.
       c_breaktype_section            TYPE i VALUE 2,
       c_breaktype_section_continuous TYPE i VALUE 3,
 * Predefined symbols
-      c_symbol_checkbox_checked      TYPE string VALUE '�', "#EC NOTEXT
+      c_symbol_checkbox_checked      TYPE string VALUE 'ю', "#EC NOTEXT
       c_symbol_checkbox              TYPE string VALUE 'o', "#EC NOTEXT
 * Draw objects
       c_draw_image                   TYPE i VALUE 0,
@@ -461,6 +535,10 @@ CLASS cl_word DEFINITION FINAL.
           virtual            TYPE string
           invalid_style      TYPE i
           invalid_line_style TYPE i,
+
+      write_spro_documentation
+        IMPORTING
+          it_documentation TYPE zlx_cl_spro_doc_loader=>ty_t_itf_lines,
 
 *****************************************************************************
 * Method write_line
@@ -1148,7 +1226,11 @@ CLASS cl_word DEFINITION FINAL.
            mt_list_style      TYPE ty_list_style_table,
            mt_list_object     TYPE ty_list_object_table,
            mw_author          TYPE string.
-    CONSTANTS : c_basesize        TYPE i VALUE 12700.
+
+    CONSTANTS : c_basesize             TYPE i VALUE 12700,
+                c_spro_text_def_size   TYPE i VALUE 12,
+                c_spro_text_title_size TYPE i VALUE 13,
+                c_spro_text            TYPE i VALUE 14.
 
     METHODS :
 * Prepare the section xml part
@@ -1239,7 +1321,7 @@ CLASS cl_word DEFINITION FINAL.
 
 ENDCLASS.                    "cl_word DEFINITION
 
-CLASS zmin_cl_req_loader  DEFINITION  FINAL.
+CLASS zlx_cl_req_loader  DEFINITION  FINAL.
 
   PUBLIC SECTION.
     TYPE-POOLS abap .
@@ -1417,7 +1499,7 @@ DATA:
   is_selection        TYPE trwbo_selection.
 
 DATA: lcl_docx       TYPE REF TO cl_word,
-      lcl_req_loader TYPE REF TO zmin_cl_req_loader.
+      lcl_req_loader TYPE REF TO zlx_cl_req_loader.
 
 SELECTION-SCREEN BEGIN OF BLOCK sb_input WITH FRAME TITLE sb_name1.
 
@@ -1564,6 +1646,16 @@ AT SELECTION-SCREEN ON VALUE-REQUEST FOR s_req-low.
 
 START-OF-SELECTION.
 
+  RANGES:
+          ra_obj_type FOR e071-object.
+
+  DATA: wa_trkorr        TYPE e070-trkorr,
+        it_trkorr        TYPE TABLE OF e070-trkorr,
+        lt_sel_opt_table TYPE rseloption,
+        wa_reqnugg       TYPE rsdsselopt,
+        wa_obj_type      LIKE LINE OF ra_obj_type.
+
+
   CREATE OBJECT lcl_docx
     EXPORTING
       tpl              = p_templ
@@ -1572,6 +1664,12 @@ START-OF-SELECTION.
   CREATE OBJECT lcl_req_loader
     EXPORTING
       io_doc = lcl_docx.
+
+  DATA lo_spro_doc_loader TYPE REF TO zlx_cl_spro_doc_loader.
+
+  lo_spro_doc_loader = zlx_cl_spro_doc_loader=>get_instance( ).
+
+
 
   CLEAR: errormsg, statusmsg.
 
@@ -1585,7 +1683,7 @@ START-OF-SELECTION.
 
   IF sy-subrc <> 0.
     MESSAGE s208(00) WITH 'Transport not found' ##NO_TEXT.
-    EXIT.
+    RETURN.
   ENDIF.
 
   SELECT SINGLE trkorr as4text
@@ -1595,24 +1693,17 @@ START-OF-SELECTION.
     AND  langu    EQ sy-langu.
 
 *     ewH-->retrieve tasks as well as transports
-  RANGES: ra_reqnugg  FOR e070-trkorr,
-          ra_obj_type FOR e071-object.
-
-  DATA: wa_trkorr   TYPE e070-trkorr,
-        it_trkorr   TYPE TABLE OF e070-trkorr,
-        wa_reqnugg  LIKE LINE OF ra_reqnugg,
-        wa_obj_type LIKE LINE OF ra_obj_type.
 
   SELECT trkorr FROM e070 INTO TABLE it_trkorr
     WHERE strkorr IN s_req.
 
-  ra_reqnugg[] = s_req[].
+  lt_sel_opt_table[] = s_req[].
 
   LOOP AT it_trkorr INTO wa_trkorr.
     wa_reqnugg-sign = 'I'.
     wa_reqnugg-option = 'EQ'.
     wa_reqnugg-low = wa_trkorr.
-    APPEND wa_reqnugg TO ra_reqnugg.
+    APPEND wa_reqnugg TO lt_sel_opt_table.
   ENDLOOP.
 *     <--ewH
 
@@ -1637,7 +1728,7 @@ START-OF-SELECTION.
   FROM  e071
   INTO TABLE it_requestobject
 *      WHERE  TRKORR in s_req.
-  WHERE  trkorr IN ra_reqnugg "ewH
+  WHERE  trkorr IN lt_sel_opt_table "ewH
      AND pgmid = 'R3TR'
      AND object IN ra_obj_type. "ewH: don't need subobjects
 
@@ -1647,6 +1738,7 @@ START-OF-SELECTION.
     MESSAGE s208(00) WITH 'No R3TR objects in request' ##NO_TEXT.
     EXIT.
   ENDIF.
+  lo_spro_doc_loader->set_tr_request( ir_transport_req = lt_sel_opt_table ).
 
   LOOP AT it_requestobject ASSIGNING FIELD-SYMBOL(<obj>).
 
@@ -1662,6 +1754,694 @@ START-OF-SELECTION.
   lcl_docx->save( ).
 
 
+
+
+
+
+
+
+
+CLASS zlx_cl_spro_doc_loader IMPLEMENTATION.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Private Method zlx_cl_spro_doc_loader->CONSTRUCTOR
+* +-------------------------------------------------------------------------------------------------+
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  METHOD constructor.
+  ENDMETHOD.
+
+
+
+  METHOD remove_links.
+
+    DATA: lv_start TYPE i,
+          lv_end   TYPE i.
+
+
+    LOOP AT ct_documentation ASSIGNING FIELD-SYMBOL(<fs_line>).
+      DO.
+        FIND FIRST OCCURRENCE OF '<' IN <fs_line>-line MATCH OFFSET lv_start.
+        IF sy-subrc <> 0.
+          EXIT.
+        ENDIF.
+        FIND FIRST OCCURRENCE OF '>' IN <fs_line>-line+lv_start MATCH OFFSET lv_end.
+        IF sy-subrc <> 0.
+          EXIT.
+        ENDIF.
+
+        lv_end = lv_end + lv_start.
+        DATA(lv_len) = lv_end - lv_start + 1.
+
+        DATA(lv_str_del) = <fs_line>-line+lv_start(lv_len).
+        REPLACE lv_str_del INTO <fs_line>-line WITH ''.
+      ENDDO.
+    ENDLOOP.
+
+  ENDMETHOD.
+
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method zlx_cl_spro_doc_loader->GET_DOCUMENTATION
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] IV_OBJ_NAME                    TYPE        TROBJ_NAME
+* | [--->] IV_LANG                        TYPE        SPRAS (default ='E')
+* | [<---] ET_DOCUMENTATION               TYPE        TY_T_TLINE
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  METHOD get_documentation.
+    mv_current_lang = iv_lang.
+
+    SELECT SINGLE  e071~activity
+       FROM e071
+       INTO @DATA(lv_activity)
+      WHERE e071~obj_name = @iv_obj_name AND e071~trkorr IN @mt_tr_request.
+
+    IF lv_activity = '' OR sy-subrc <> 0.
+      RETURN.
+    ENDIF.
+
+    SELECT SINGLE cus_imgach~docu_id
+      FROM cus_imgach
+      INTO @DATA(lv_docu_id)
+      WHERE cus_imgach~activity = @lv_activity.
+
+    IF lv_docu_id = '' OR sy-subrc <> 0.
+      RETURN.
+    ENDIF.
+
+    DATA(lv_doc_class) = lv_docu_id(4).
+    DATA lt_itf_documentation TYPE ty_t_tline.
+    DATA lv_id TYPE dokhl-id.
+    DATA lv_type TYPE dokhl-typ.
+    DATA object TYPE doku_obj.
+
+
+    me->transform_new_old(
+      EXPORTING
+        iv_doc_class  = lv_doc_class   " Hypertext: Object Class
+        iv_doc_name   = lv_docu_id    " Documentation Object
+      CHANGING
+        cv_doc_id     = lv_id    " Document class
+        cv_doc_object = object    " Documentation Object
+        cv_doc_type   = lv_type  " Documentation type
+    ).
+
+    IF lv_doc_class NE 'TITL'.
+
+      lv_type = 'X'.
+      CALL FUNCTION 'DOCU_EXIST_CHECK'
+        EXPORTING
+          id       = lv_id
+          object   = object
+          langu    = mv_current_lang
+          typ      = 'M'
+        EXCEPTIONS
+          ret_code = 1.
+      IF sy-subrc EQ 0.
+        lv_type = 'M'.
+      ELSE.
+
+        CALL FUNCTION 'DOCU_EXIST_CHECK'
+          EXPORTING
+            id       = lv_id
+            object   = object
+            langu    = mv_current_lang
+            typ      = 'E'
+          EXCEPTIONS
+            ret_code = 1.
+        IF sy-subrc EQ 0 AND lv_id <> 'FU'.
+          lv_type = 'E'.
+        ELSE.
+
+          CALL FUNCTION 'DOCU_EXIST_CHECK'
+            EXPORTING
+              id       = lv_id
+              object   = object
+              langu    = mv_current_lang
+              typ      = 'T'
+            EXCEPTIONS
+              ret_code = 1.
+          IF sy-subrc = 0.
+            lv_type = 'T'.
+          ENDIF.
+        ENDIF.
+      ENDIF.
+    ENDIF.
+
+
+
+    DATA ls_xdokil TYPE dokil.
+
+    CALL FUNCTION 'DOCU_INIT'
+      EXPORTING
+        id     = lv_id
+        langu  = mv_current_lang
+        object = object
+        typ    = lv_type
+      IMPORTING
+*       FOUND  =
+        xdokil = ls_xdokil.
+
+
+    DATA lv_doktitle TYPE dsyst-doktitle.
+    DATA ls_head TYPE thead.
+*    DATA lt_line        TYPE TABLE OF tline.
+
+    CALL FUNCTION 'DOCU_READ'
+      EXPORTING
+        id      = ls_xdokil-id
+        langu   = ls_xdokil-langu
+        object  = ls_xdokil-object
+        typ     = ls_xdokil-typ
+        version = ls_xdokil-version
+*       SUPPRESS_TEMPLATE       = ' '
+*       USE_NOTE_TEMPLATE       = ' '
+      IMPORTING
+        head    = ls_head
+      TABLES
+        line    = lt_itf_documentation.
+
+    CALL FUNCTION 'DOCU_GET_SHORTTEXT'
+      EXPORTING
+        langu    = mv_current_lang
+        id       = lv_id
+        object   = object
+      IMPORTING
+        shorttxt = lv_doktitle.
+
+    CALL FUNCTION 'DOCU_UNUSED_TEMPLATE_DELETE'
+      TABLES
+        txtlines = lt_itf_documentation.
+
+    DATA ls_line LIKE LINE OF lt_itf_documentation.
+
+    IF lv_doktitle NE space AND lv_id NE 'IN'.
+      ls_line-tdformat = 'U1'.
+      ls_line-tdline   = lv_doktitle.
+      INSERT ls_line INTO lt_itf_documentation  INDEX 1.
+    ENDIF.
+
+    me->remove_lz_in_tables(
+      CHANGING
+        ct_lines = lt_itf_documentation
+    ).
+
+    me->prepare_itf(
+      EXPORTING
+        is_header_txt =  ls_head   " SAPscript: Text Header
+      CHANGING
+        ct_itf_text   = lt_itf_documentation
+    ).
+
+    DATA: ls_doc_paragraph    TYPE LINE OF ty_t_itf_lines.
+
+
+    CLEAR et_documentation.
+
+    LOOP AT lt_itf_documentation ASSIGNING FIELD-SYMBOL(<fs_line>).
+      CASE <fs_line>-tdformat.
+        WHEN '' OR '='.
+*          REPLACE ALL OCCURRENCES OF REGEX '<*>' IN <fs_line>-tdline WITH ''.
+          CONDENSE ls_doc_paragraph-line.
+
+          CONCATENATE ls_doc_paragraph-line ' ' <fs_line>-tdline
+          INTO ls_doc_paragraph-line RESPECTING BLANKS.
+          CONDENSE ls_doc_paragraph-line.
+
+        WHEN '=21'.
+
+        WHEN OTHERS.
+          IF ls_doc_paragraph-line <> '' AND ls_doc_paragraph-format <> '/:'.
+            APPEND ls_doc_paragraph TO et_documentation.
+          ENDIF.
+          ls_doc_paragraph-line = <fs_line>-tdline.
+          ls_doc_paragraph-format = <fs_line>-tdformat.
+
+      ENDCASE.
+
+    ENDLOOP.
+    IF ls_doc_paragraph-line <> '' AND ls_doc_paragraph-format <> '/:'.
+      APPEND ls_doc_paragraph TO et_documentation.
+    ENDIF.
+    remove_links( CHANGING ct_documentation = et_documentation ).
+
+
+    es_head = ls_head.
+  ENDMETHOD.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Static Public Method zlx_cl_spro_doc_loader=>GET_INSTANCE
+* +-------------------------------------------------------------------------------------------------+
+* | [<-()] RO_INSTANCE                    TYPE REF TO zlx_cl_spro_doc_loader
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  METHOD get_instance.
+    IF mo_instance IS NOT BOUND.
+      mo_instance = NEW #( ).
+    ENDIF.
+
+    ro_instance = mo_instance.
+
+  ENDMETHOD.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Private Method zlx_cl_spro_doc_loader->GET_LISTALPHA
+* +-------------------------------------------------------------------------------------------------+
+* | [<-->] CV_COUNT                       TYPE        SYTABIX
+* | [<-->] CV_ALPHA                       TYPE        C
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  METHOD get_listalpha.
+
+    DATA form_number(4) TYPE c.
+
+    IF cv_count EQ 1.
+      MOVE 'a),,' TO form_number.                           "#EC NOTEXT
+    ELSEIF cv_count EQ 2.
+      MOVE 'b),,' TO form_number.                           "#EC NOTEXT
+    ELSEIF cv_count EQ 3.
+      MOVE 'c),,' TO form_number.                           "#EC NOTEXT
+    ELSEIF cv_count EQ 4.
+      MOVE 'd),,' TO form_number.                           "#EC NOTEXT
+    ELSEIF cv_count EQ 5.
+      MOVE 'e),,' TO form_number.                           "#EC NOTEXT
+    ELSEIF cv_count EQ 6.
+      MOVE 'f),,' TO form_number.                           "#EC NOTEXT
+    ELSEIF cv_count EQ 7.
+      MOVE 'g),,' TO form_number.                           "#EC NOTEXT
+    ELSEIF cv_count EQ 8.
+      MOVE 'h),,' TO form_number.                           "#EC NOTEXT
+    ELSEIF cv_count EQ 9.
+      MOVE 'i),,' TO form_number.                           "#EC NOTEXT
+    ELSEIF cv_count EQ 10.
+      MOVE 'j),,' TO form_number.                           "#EC NOTEXT
+    ELSEIF cv_count EQ 11.
+      MOVE 'k),,' TO form_number.                           "#EC NOTEXT
+    ELSEIF cv_count EQ 12.
+      MOVE 'l),,' TO form_number.                           "#EC NOTEXT
+    ELSEIF cv_count EQ 13.
+      MOVE 'm),,' TO form_number.                           "#EC NOTEXT
+    ELSEIF cv_count EQ 14.
+      MOVE 'n),,' TO form_number.                           "#EC NOTEXT
+    ELSEIF cv_count EQ 15.
+      MOVE 'o),,' TO form_number.                           "#EC NOTEXT
+    ELSEIF cv_count EQ 16.
+      MOVE 'p),,' TO form_number.                           "#EC NOTEXT
+    ELSEIF cv_count EQ 17.
+      MOVE 'q),,' TO form_number.                           "#EC NOTEXT
+    ELSEIF cv_count EQ 18.
+      MOVE 'r),,' TO form_number.                           "#EC NOTEXT
+    ELSEIF cv_count EQ 19.
+      MOVE 's),,' TO form_number.                           "#EC NOTEXT
+    ELSEIF cv_count EQ 20.
+      MOVE 't),,' TO form_number.                           "#EC NOTEXT
+    ELSEIF cv_count EQ 21.
+      MOVE 'u),,' TO form_number.                           "#EC NOTEXT
+    ELSEIF cv_count EQ 22.
+      MOVE 'v),,' TO form_number.                           "#EC NOTEXT
+    ELSEIF cv_count EQ 23.
+      MOVE 'w),,' TO form_number.                           "#EC NOTEXT
+    ELSEIF cv_count EQ 24.
+      MOVE 'x),,' TO form_number.                           "#EC NOTEXT
+    ELSEIF cv_count EQ 25.
+      MOVE 'y),,' TO form_number.                           "#EC NOTEXT
+    ELSEIF cv_count EQ 26.
+      MOVE 'z),,' TO form_number.                           "#EC NOTEXT
+    ENDIF.
+    MOVE form_number TO cv_alpha.
+  ENDMETHOD.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Private Method zlx_cl_spro_doc_loader->GET_LIST_NUMBER
+* +-------------------------------------------------------------------------------------------------+
+* | [<-->] CV_NUMBER_COUNT                TYPE        SYTABIX
+* | [<-->] CV_NUMBER                      TYPE        C
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  METHOD get_list_number.
+
+    DATA form_counter LIKE sy-tabix.
+    DATA: form_number(13) TYPE c,
+          lv_length       TYPE i.
+
+    MOVE cv_number_count TO form_counter.
+    MOVE form_counter TO form_number.
+
+    DO.
+      IF form_number(1) EQ space OR form_number(1) EQ '0'.
+        SHIFT form_number LEFT BY 1 PLACES.
+      ELSE.
+        EXIT.
+      ENDIF.
+    ENDDO.
+    lv_length = strlen( form_number ).
+    MOVE '.,,' TO form_number+lv_length(3).
+    CONDENSE form_number NO-GAPS.
+    MOVE form_number TO cv_number.
+
+  ENDMETHOD.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Private Method zlx_cl_spro_doc_loader->PREPARE_ITF
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] IS_HEADER_TXT                  TYPE        THEAD
+* | [<-->] CT_ITF_TEXT                    TYPE        TY_T_TLINE
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  METHOD prepare_itf.
+    DATA  text_tab_temp TYPE ty_t_tline.
+    DATA alpha_count  LIKE sy-tabix.
+    DATA number_count LIKE sy-tabix.
+    DATA: number(13) TYPE c, "sy-tabix = 10 + 3 for '.,,'
+          lv_length  TYPE i.
+    DATA alpha(4)  TYPE c.
+    DATA form_id         TYPE dokhl-id.
+    DATA  form_head TYPE thead.
+* interface of text_include_replace
+    DATA: form_changed(1).                                  "#EC NEEDED
+    DATA: form_error_type LIKE sy-tabix.                    "#EC NEEDED
+    DATA wa_text_tab_temp TYPE tline.
+    DATA tabix TYPE sy-tabix.
+
+*
+    text_tab_temp[] = ct_itf_text[].
+    CLEAR ct_itf_text[].
+*
+* Resolve all includes
+*
+* create header for documentation
+    CLEAR form_head.
+*
+    form_head = is_header_txt.
+*
+* get the includes
+*
+    CALL FUNCTION 'TEXT_INCLUDE_REPLACE'
+      EXPORTING
+        all_level  = 'X'
+        endline    = 99999
+        header     = form_head
+        startline  = 1
+*       PROGRAM    = ' '
+      IMPORTING
+        changed    = form_changed
+        error_type = form_error_type
+        newheader  = form_head
+      TABLES
+        lines      = text_tab_temp.
+
+    LOOP AT text_tab_temp ASSIGNING FIELD-SYMBOL(<fs_line>) WHERE tdline = 'STYLE *'.
+      tabix = sy-tabix.
+      MOVE-CORRESPONDING <fs_line> TO wa_text_tab_temp.
+      DELETE text_tab_temp INDEX tabix.
+    ENDLOOP.
+
+    CALL FUNCTION 'DOCU_UNUSED_TEMPLATE_DELETE'
+      TABLES
+        txtlines = text_tab_temp.
+    IF wa_text_tab_temp IS NOT INITIAL.
+      APPEND wa_text_tab_temp TO text_tab_temp.
+    ENDIF.
+
+* set symbol DEVICE to SCREEN. This is necessary to avoid, that
+* lines between IF DEVICE = 'SCREEN' statements are removed
+    CALL FUNCTION 'TEXT_SYMBOL_SETVALUE'
+      EXPORTING
+        name   = 'DEVICE'
+        value  = 'SCREEN'
+      EXCEPTIONS
+        OTHERS = 0.                                           "BCEK02873
+
+    CALL FUNCTION 'TEXT_CONTROL_REPLACE'
+      EXPORTING
+        header = form_head
+      TABLES
+        lines  = text_tab_temp
+      EXCEPTIONS
+        OTHERS = 0.                                           "BCEK02873
+*
+    LOOP AT text_tab_temp ASSIGNING <fs_line>.
+*   check numbering
+      IF <fs_line>-tdformat EQ 'B1'.
+        CLEAR alpha_count.
+      ELSEIF <fs_line>-tdformat EQ 'N1'.
+        ADD 1 TO number_count.
+        me->get_list_number(
+          CHANGING
+            cv_number_count =  number_count   " Row Index of Internal Tables
+            cv_number       = number
+        ).
+        MOVE 'X1' TO <fs_line>-tdformat.
+        lv_length = strlen( number ).
+        IF lv_length > 0.
+          SHIFT <fs_line>-tdline RIGHT BY lv_length PLACES.
+          MOVE number TO <fs_line>-tdline(lv_length).
+        ENDIF.
+        CLEAR alpha_count.
+      ELSEIF <fs_line>-tdformat EQ 'N2'.
+        ADD 1 TO alpha_count.
+
+        me->get_listalpha(
+          CHANGING
+            cv_count = alpha_count    " Row Index of Internal Tables
+            cv_alpha = alpha
+        ).
+
+        MOVE 'X2' TO <fs_line>-tdformat.
+        SHIFT <fs_line>-tdline RIGHT BY 4 PLACES.
+        MOVE alpha TO <fs_line>-tdline(4).
+      ELSEIF <fs_line>-tdformat NE 'B1'
+         AND <fs_line>-tdformat NE 'UT'
+         AND <fs_line>-tdformat NE '= '
+         AND <fs_line>-tdformat NE 'B2'
+         AND <fs_line>-tdformat NE 'N1'
+         AND <fs_line>-tdformat NE 'N2'
+         AND <fs_line>-tdformat NE 'AL'
+         AND <fs_line>-tdformat NE 'BL'
+         AND <fs_line>-tdformat NE 'K1'
+         AND <fs_line>-tdformat NE 'K2'
+         AND <fs_line>-tdformat NE 'K3'
+         AND <fs_line>-tdformat NE 'K4'
+         AND <fs_line>-tdformat NE 'K5'
+         AND <fs_line>-tdformat NE 'K6'
+         AND <fs_line>-tdformat NE 'T1'
+         AND <fs_line>-tdformat NE 'T2'
+         AND <fs_line>-tdformat NE 'T3'
+         AND <fs_line>-tdformat NE 'T4'
+         AND <fs_line>-tdformat NE 'T5'
+         AND <fs_line>-tdformat NE 'T6'
+         AND <fs_line>-tdformat NE '/ '
+         AND <fs_line>-tdformat NE '/('
+         AND <fs_line>-tdformat NE '/:'
+         AND <fs_line>-tdformat NE 'LA'
+         AND <fs_line>-tdformat NE 'LZ'
+         AND <fs_line>-tdformat NE 'TX'
+         AND <fs_line>-tdformat NE 'AS'   "JT 270899-002
+         AND <fs_line>-tdformat NE 'PE'   "JT 270899-002
+         AND <fs_line>-tdformat NE space
+         AND <fs_line>-tdformat NE '* '
+         AND <fs_line>-tdformat NE '/*'
+         AND ( form_head-tdobject EQ 'HWR3'    "for SCN
+               AND (
+               <fs_line>-tdformat NE 'NY' AND
+               <fs_line>-tdformat NE 'NZ' AND
+               <fs_line>-tdformat NE 'E1' AND
+               <fs_line>-tdformat NE 'E2' AND
+               <fs_line>-tdformat NE 'SS' AND
+               <fs_line>-tdformat NE 'G1' ) ).
+        CLEAR number_count.
+        CLEAR alpha_count.
+      ELSEIF     <fs_line>-tdformat EQ '/:'.
+        IF <fs_line>-tdline   CS 'RESET N1'.
+          CLEAR number_count.
+        ELSEIF <fs_line>-tdline   CS 'RESET N2'.
+          CLEAR alpha_count.
+        ENDIF.
+      ENDIF.
+*   check format
+      IF <fs_line>-tdformat EQ 'U1'.
+        MOVE 'U2' TO <fs_line>-tdformat.
+      ENDIF.
+      IF <fs_line>-tdformat EQ '/='.
+        MOVE 'A1' TO <fs_line>-tdformat.
+      ENDIF.
+      IF form_id EQ 'GL'.
+        IF <fs_line>-tdformat EQ 'U3'.
+          MOVE 'U2' TO <fs_line>-tdformat.
+        ENDIF.
+        IF <fs_line>-tdformat EQ 'LZ'.
+          CONTINUE.
+        ENDIF.
+      ENDIF.
+      APPEND <fs_line> TO ct_itf_text.
+    ENDLOOP.
+*
+* Korrektur fE Tabellen vor Aufzählungen
+*
+    DATA: flag_t(1) TYPE c.
+    DATA: l_ct_itf_text TYPE tline.
+    text_tab_temp[] = ct_itf_text[].
+    CLEAR ct_itf_text[].
+*
+    LOOP AT text_tab_temp ASSIGNING <fs_line>.
+      IF ( <fs_line>-tdformat = 'X1' OR
+      <fs_line>-tdformat = 'X2' OR
+      <fs_line>-tdformat = 'B1' OR
+      <fs_line>-tdformat = 'B2' ) AND
+      flag_t NE space.
+        l_ct_itf_text-tdformat = 'LZ'.
+        APPEND l_ct_itf_text TO ct_itf_text.
+      ENDIF.
+
+      APPEND  <fs_line> TO ct_itf_text.
+      IF <fs_line>-tdformat(1) = 'T'.
+        flag_t = 'X'.
+      ELSE.
+        flag_t = space.
+      ENDIF.
+    ENDLOOP.
+*
+* Korrektur fE Folgezeilen in Tabellen.
+*
+    text_tab_temp[] = ct_itf_text[].
+    CLEAR ct_itf_text[].
+*
+    DATA: iloop             TYPE i,
+          table_found(1)    TYPE c,
+          table_start_index TYPE i,
+          diff              TYPE i,
+          ddiff             TYPE i,
+          olddiff           TYPE i,
+          tdformat          TYPE tdformat.
+
+    LOOP AT text_tab_temp ASSIGNING <fs_line>.
+      iloop = iloop + 1.
+      IF <fs_line>-tdformat(1) = 'T'.
+        table_found = 'X'.
+        table_start_index = iloop.
+        tdformat = <fs_line>-tdformat.
+      ENDIF.
+*
+      diff = iloop - table_start_index.
+      ddiff = diff - olddiff.
+*
+      IF <fs_line>-tdformat = '/' AND
+                           ddiff LE 1 AND
+                           table_found = 'X'.
+        <fs_line>-tdformat = tdformat.
+        olddiff = diff.
+      ENDIF.
+*
+      IF ddiff GE 2.
+        table_found = space.
+      ENDIF.
+*
+      APPEND <fs_line> TO ct_itf_text.
+
+    ENDLOOP.
+
+    CALL FUNCTION 'INIT_TEXTSYMBOL'. " initialize symbol maintenance
+    CALL FUNCTION 'TEXT_SYMBOL_REPLACE'
+      EXPORTING
+        header = is_header_txt
+      TABLES
+        lines  = ct_itf_text.
+
+
+
+  ENDMETHOD.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Private Method zlx_cl_spro_doc_loader->REMOVE_LZ_IN_TABLES
+* +-------------------------------------------------------------------------------------------------+
+* | [<-->] CT_LINES                       TYPE        TY_T_TLINE
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  METHOD remove_lz_in_tables.
+
+    DATA: lv_listopen TYPE sy-tabix,
+          lv_current  TYPE sy-tabix,
+          lv_next     TYPE sy-tabix,
+          ls_line     TYPE tline.
+
+* search for tables formats :
+    LOOP AT ct_lines ASSIGNING FIELD-SYMBOL(<fs_tline>).
+      CASE <fs_tline>-tdformat.
+        WHEN 'T1' OR 'T2' OR 'T3' OR 'T4' OR 'T5' OR 'T6'
+          OR 'K1' OR 'K2' OR 'K3' OR 'K4' OR 'K5' OR 'K6'.
+
+          lv_listopen = sy-tabix.
+
+        WHEN '/ ' OR space.
+* do nothing, search the next line
+        WHEN 'LZ' OR 'LA' OR '/*'.
+          CHECK  NOT lv_listopen IS INITIAL.
+          IF <fs_tline>-tdformat NE '/*'.
+            lv_current = sy-tabix.
+            lv_next = lv_current + 1.
+            READ TABLE ct_lines INTO ls_line INDEX lv_next.
+            IF sy-subrc = 0 AND
+            ( ls_line-tdformat = 'M5' OR ls_line-tdformat = '/(' ).
+            ELSE.
+              DELETE ct_lines INDEX lv_current.
+            ENDIF.
+          ELSE.
+            DELETE ct_lines INDEX sy-tabix.
+          ENDIF.
+        WHEN OTHERS.
+          CLEAR lv_listopen.
+      ENDCASE.
+    ENDLOOP.                             " ITF_TEXT-Tabelle
+  ENDMETHOD.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method zlx_cl_spro_doc_loader->SET_TR_REQUEST
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] IR_TRANSPORT_REQ               TYPE        RSELOPTION
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  METHOD set_tr_request.
+    mt_tr_request = ir_transport_req.
+  ENDMETHOD.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Private Method zlx_cl_spro_doc_loader->TRANSFORM_NEW_OLD
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] IV_DOC_CLASS                   TYPE        DOKU_CLASS
+* | [--->] IV_DOC_NAME                    TYPE        DOKU_OBJ
+* | [<-->] CV_DOC_ID                      TYPE        DOKU_ID
+* | [<-->] CV_DOC_OBJECT                  TYPE        DOKU_OBJ
+* | [<-->] CV_DOC_TYPE                    TYPE        DOKU_TYP
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  METHOD transform_new_old.
+    DATA dokedicl  TYPE tdcld-dokedicl.
+    DATA dokparcl  TYPE tdcld-dokparcl.
+
+
+
+    DATA ls_tdcld TYPE tdcld.
+
+    SELECT SINGLE *
+      FROM tdcld
+      INTO ls_tdcld
+      WHERE dokclass EQ iv_doc_class.
+
+    IF ls_tdcld-dokparcl NE space.
+      cv_doc_id = ls_tdcld-dokparcl.
+      cv_doc_object = iv_doc_name.
+      EXIT.
+    ENDIF.
+
+    IF iv_doc_class EQ space.
+      MOVE iv_doc_class TO cv_doc_id.
+      MOVE iv_doc_name TO cv_doc_object.
+      EXIT.
+    ENDIF.
+
+  ENDMETHOD.
+ENDCLASS.
 
 
 
@@ -1919,6 +2699,84 @@ CLASS cl_word IMPLEMENTATION.
     ENDLOOP.
     SORT mt_list_object BY type id.
   ENDMETHOD.                    "constructor
+
+  METHOD write_spro_documentation.
+
+    DATA ls_style TYPE ty_character_style_effect.
+    DATA ls_paragraph TYPE zlx_cl_spro_doc_loader=>ty_s_itf_lines.
+
+    LOOP AT it_documentation INTO ls_paragraph.
+
+
+      ls_style-bold = c_false.
+      ls_style-size = c_spro_text_def_size.
+
+      CASE ls_paragraph-format.
+
+        WHEN 'U2'.
+          CLEAR ls_style.
+          ls_style-bold = c_true.
+          ls_style-size = c_spro_text.
+
+          write_text(
+            EXPORTING
+              style_effect       = ls_style
+              textline           = ls_paragraph-line      ).
+          write_line( ).
+
+        WHEN 'K1'.
+          ls_style-bold = c_true.
+
+          write_text(
+            EXPORTING
+              style_effect       = ls_style
+              textline           = ls_paragraph-line      ).
+          write_line( ).
+
+        WHEN 'UT'.
+          CLEAR ls_style.
+          ls_style-bold = c_true.
+          ls_style-size = c_spro_text_def_size.
+
+          write_text(
+            EXPORTING
+              style_effect       = ls_style
+              textline           = ls_paragraph-line       ).
+          write_line( ).
+
+        WHEN 'B1' OR 'B2' .
+
+          write_text(
+            EXPORTING
+              style_effect       = ls_style
+              textline           = | -{ ls_paragraph-line }| ).
+          write_line( ).
+
+        WHEN 'X1' OR 'X2'.
+
+          REPLACE  ',,' INTO ls_paragraph-line WITH ''.
+
+          write_text(
+            EXPORTING
+              style_effect       = ls_style
+              textline           = ls_paragraph-line ).
+          write_line( ).
+
+        WHEN OTHERS.
+
+          write_text(
+            EXPORTING
+              style_effect       = ls_style
+              textline           = ls_paragraph-line      ).
+          write_line( ).
+      ENDCASE.
+
+    ENDLOOP.
+
+    write_newpage( ).
+
+  ENDMETHOD.
+
 
   METHOD write_text.
     DATA : lw_style   TYPE string,
@@ -3463,6 +4321,8 @@ CLASS cl_word IMPLEMENTATION.
       EXPORTING
         filename = 'docProps/custom.xml'
         content  = lw_file.
+
+
   ENDMETHOD.                    "create_custom_field
 
   METHOD create_character_style.
@@ -4974,7 +5834,7 @@ CLASS cl_word IMPLEMENTATION.
                     INTO xml.
       ENDIF.
 
-      IF NOT style_effect-spacing IS INITIAL AND style_effect-spacing CO '0123456789 -'.
+      IF NOT style_effect-spacing IS INITIAL AND style_effect-spacing = '0123456789 -'.
         IF style_effect-spacing GT 0.
           lw_string = style_effect-spacing.
           CONDENSE lw_string NO-GAPS.
@@ -5330,6 +6190,7 @@ CLASS cl_word IMPLEMENTATION.
           lr_itab         TYPE REF TO data,
           lv_columns      TYPE i.
 
+
     CALL FUNCTION 'DDIF_TABL_GET'
       EXPORTING
         name          = table_name
@@ -5346,21 +6207,25 @@ CLASS cl_word IMPLEMENTATION.
       RETURN.
     ENDIF.
 
-    CALL FUNCTION 'DDIF_TABL_GET'
-      EXPORTING
-        name          = table_name
-        langu         = gc_default_lang
-      IMPORTING
-        dd02v_wa      = ls_dd02v_wa_def
-      TABLES
-        dd03p_tab     = lt_dd03p_def
-      EXCEPTIONS
-        illegal_input = 1
-        OTHERS        = 2.
+    IF p_lang <> gc_default_lang.
+      CALL FUNCTION 'DDIF_TABL_GET'
+        EXPORTING
+          name          = table_name
+          langu         = gc_default_lang
+        IMPORTING
+          dd02v_wa      = ls_dd02v_wa_def
+        TABLES
+          dd03p_tab     = lt_dd03p_def
+        EXCEPTIONS
+          illegal_input = 1
+          OTHERS        = 2.
 
-    IF sy-subrc <> 0.
-      RETURN.
+      IF sy-subrc <> 0.
+        RETURN.
+      ENDIF.
     ENDIF.
+
+
 
 
     TYPES: BEGIN OF ty_field_routine,
@@ -5386,11 +6251,11 @@ CLASS cl_word IMPLEMENTATION.
       READ TABLE lt_dd03p ASSIGNING FIELD-SYMBOL(<fs_field>) INDEX sy-index.
 
       IF sy-subrc <> 0.
-        continue.
+        CONTINUE.
       ENDIF.
 
 
-      IF NOT <fs_field>-convexit CO ''.
+      IF <fs_field>-convexit <> ''.
         ls_field_routine-field = <fs_field>-fieldname.
         ls_field_routine-routine = <fs_field>-convexit.
         ls_field_routine-output_len = <fs_field>-outputlen.
@@ -5434,7 +6299,7 @@ CLASS cl_word IMPLEMENTATION.
 
       ASSIGN COMPONENT lv_cmp OF STRUCTURE <ls_tab> TO FIELD-SYMBOL(<lv_val>).
 
-      IF <fs_ddtxt>-ddtext CO '' OR sy-subrc <> 0.
+      IF ( <fs_ddtxt>-ddtext = '' OR sy-subrc <> 0 ) AND p_lang <> gc_default_lang.
         READ TABLE lt_dd03p_def ASSIGNING <fs_ddtxt> WITH KEY fieldname = <fs_tst>-name.
         IF sy-subrc <> 0.
           RETURN.
@@ -5497,18 +6362,24 @@ CLASS cl_word IMPLEMENTATION.
 
 
     DATA lv_tabname TYPE string.
+    DATA lv_tab_descr TYPE string.
 
-    IF ls_dd02v_wa_a-ddtext CO ''.
-      lv_tabname = ls_dd02v_wa_def-tabname.
+    IF p_lang = gc_default_lang.
+      lv_tab_descr = ls_dd02v_wa_a-ddtext.
     ELSE.
-      lv_tabname = ls_dd02v_wa_a-tabname.
+      IF ls_dd02v_wa_a-ddtext = ''.
+        lv_tab_descr = ls_dd02v_wa_def-ddtext.
+      ELSE.
+        lv_tab_descr = ls_dd02v_wa_def-ddtext.
+      ENDIF.
+
     ENDIF.
 
     lv_tabname = ls_dd02v_wa_a-tabname.
     CONDENSE lv_tabname.
 
 
-    CONCATENATE 'Table ' lv_tabname  ': ' ls_dd02v_wa_a-ddtext
+    CONCATENATE 'Table ' lv_tabname  ': ' lv_tab_descr
     INTO lv_textline
     RESPECTING BLANKS ##NO_TEXT.
 
@@ -5537,11 +6408,11 @@ ENDCLASS.                    "cl_word IMPLEMENTATION
 
 
 
-CLASS zmin_cl_req_loader IMPLEMENTATION.
+CLASS zlx_cl_req_loader IMPLEMENTATION.
 
 
 * <SIGNATURE>---------------------------------------------------------------------------------------+
-* | Instance Public Method ZMIN_CL_REQ_LOADER->CONSTRUCTOR
+* | Instance Public Method zlx_cl_req_loader->CONSTRUCTOR
 * +-------------------------------------------------------------------------------------------------+
 * +--------------------------------------------------------------------------------------</SIGNATURE>
   METHOD constructor.
@@ -5649,6 +6520,44 @@ CLASS zmin_cl_req_loader IMPLEMENTATION.
             EXPORTING
               textline   = ev_textline
               line_style = 'Heading1' ##NO_TEXT.
+
+          DATA lo_spro_doc_loader TYPE REF TO zlx_cl_spro_doc_loader.
+
+          lo_spro_doc_loader = zlx_cl_spro_doc_loader=>get_instance( ).
+
+          DATA lv_object_name TYPE trobj_name.
+          lv_object_name = ev_activity.
+          DATA lt_spro_docum TYPE zlx_cl_spro_doc_loader=>ty_t_itf_lines.
+          DATA lv_document TYPE string.
+          DATA ls_head TYPE thead.
+          DATA lo_itf_to_xml_convertor TYPE REF TO cl_note_itf2xml.
+
+          lo_itf_to_xml_convertor = NEW #( ).
+
+          lo_spro_doc_loader->get_documentation(
+            EXPORTING
+              iv_obj_name      = lv_object_name
+              iv_lang          = p_lang    " Language Key
+            IMPORTING
+              et_documentation = lt_spro_docum
+              es_head          = ls_head
+          ).
+
+          IF lines( lt_spro_docum ) = 0 AND p_lang <> gc_default_lang.
+
+            lo_spro_doc_loader->get_documentation(
+              EXPORTING
+                  iv_obj_name      = lv_object_name
+                  iv_lang          = gc_default_lang    " Language Key
+              IMPORTING
+                  et_documentation = lt_spro_docum
+                  es_head          = ls_head
+                  ).
+          ENDIF.
+
+          IF lines( lt_spro_docum ) <> 0.
+            mo_doc->write_spro_documentation( it_documentation = lt_spro_docum ).
+          ENDIF.
 
         ENDAT.
 
@@ -5960,7 +6869,7 @@ CLASS zmin_cl_req_loader IMPLEMENTATION.
             IMPORTING
               dd25v_wa = ls_dd25v_wa.
 
-          IF ls_dd25v_wa-ddtext CO ''.
+          IF ls_dd25v_wa-ddtext = ''.
             CALL FUNCTION 'DDIF_VIEW_GET'
               EXPORTING
                 langu    = gc_default_lang
@@ -5979,7 +6888,45 @@ CLASS zmin_cl_req_loader IMPLEMENTATION.
             EXPORTING
               textline   = ev_textline
               line_style = 'Heading1' ##NO_TEXT.
-*          CALL METHOD mo_doc->('WRITE_LINE').
+
+
+          DATA lo_spro_doc_loader TYPE REF TO zlx_cl_spro_doc_loader.
+
+          lo_spro_doc_loader = zlx_cl_spro_doc_loader=>get_instance( ).
+
+          DATA lv_object_name TYPE trobj_name.
+          lv_object_name = ev_activity.
+          DATA lt_spro_docum TYPE zlx_cl_spro_doc_loader=>ty_t_itf_lines.
+          DATA lv_document TYPE string.
+          DATA ls_head TYPE thead.
+          DATA lo_itf_to_xml_convertor TYPE REF TO cl_note_itf2xml.
+
+          lo_itf_to_xml_convertor = NEW #( ).
+
+          lo_spro_doc_loader->get_documentation(
+            EXPORTING
+              iv_obj_name      = lv_object_name
+              iv_lang          = p_lang    " Language Key
+            IMPORTING
+              et_documentation = lt_spro_docum
+              es_head          = ls_head
+          ).
+
+          IF lines( lt_spro_docum ) = 0 AND p_lang <> gc_default_lang.
+
+            lo_spro_doc_loader->get_documentation(
+              EXPORTING
+                  iv_obj_name      = lv_object_name
+                  iv_lang          = gc_default_lang    " Language Key
+              IMPORTING
+                  et_documentation = lt_spro_docum
+                  es_head          = ls_head
+                  ).
+          ENDIF.
+
+          IF lines( lt_spro_docum ) <> 0.
+            mo_doc->write_spro_documentation( it_documentation = lt_spro_docum ).
+          ENDIF.
 
         ENDAT.
 
@@ -6167,11 +7114,7 @@ CLASS zmin_cl_req_loader IMPLEMENTATION.
             SORT <fs_t_table> BY (lt_sortfields).
             DELETE ADJACENT DUPLICATES FROM <fs_t_table>.
 
-*            CALL METHOD mo_doc->('WRITE_TEXT')
-*              EXPORTING
-*                textline = 'Table: '
-*                line_style = 'Heading2'.
-*            CALL METHOD mo_doc->('WRITE_LINE').
+
             CALL METHOD mo_doc->('WRITE_TABLE_ENH')
               EXPORTING
                 content    = <fs_t_table>
@@ -6278,256 +7221,297 @@ CLASS zmin_cl_req_loader IMPLEMENTATION.
 
     IF sy-subrc = 0.
 
+      DATA:
+        ev_name     TYPE string,
+        ev_activity TYPE string,
+        ev_textline TYPE string.
+
       lv_from = sy-tabix.
 
+      ev_activity = t_e071k[ lv_from ]-mastername.
+
+      DATA(lv_ca) = 'View Cluster ' ##NO_TEXT.
+      DATA(lv_separator) = ': ' ##NO_TEXT.
+
+      SELECT SINGLE text FROM vcldirt
+        INTO @DATA(lv_view_cluster_descr)
+        WHERE vclname = @ev_activity AND spras = @p_lang.
+
+      IF lv_view_cluster_descr = ''.
+        SELECT SINGLE text FROM vcldirt
+        INTO @lv_view_cluster_descr
+        WHERE vclname = @ev_activity AND spras = @gc_default_lang.
+      ENDIF.
+
+
+      CONCATENATE lv_ca ev_activity lv_separator lv_view_cluster_descr
+      INTO ev_textline RESPECTING BLANKS.
+
+
+      CALL METHOD mo_doc->('WRITE_TEXT')
+        EXPORTING
+          textline   = ev_textline
+          line_style = 'Heading1' ##NO_TEXT.
+
+      DATA lo_spro_doc_loader TYPE REF TO zlx_cl_spro_doc_loader.
+
+      lo_spro_doc_loader = zlx_cl_spro_doc_loader=>get_instance( ).
+
+      DATA lv_object_name TYPE trobj_name.
+      lv_object_name = ev_activity.
+      DATA lt_spro_docum TYPE zlx_cl_spro_doc_loader=>ty_t_itf_lines.
+      DATA lv_document TYPE string.
+      DATA ls_head TYPE thead.
+      DATA lo_itf_to_xml_convertor TYPE REF TO cl_note_itf2xml.
+
+      lo_itf_to_xml_convertor = NEW #( ).
+
+      lo_spro_doc_loader->get_documentation(
+        EXPORTING
+          iv_obj_name      = lv_object_name
+          iv_lang          = p_lang    " Language Key
+        IMPORTING
+          et_documentation = lt_spro_docum
+          es_head          = ls_head
+      ).
+
+      IF lines( lt_spro_docum ) = 0 AND p_lang <> gc_default_lang.
+
+        lo_spro_doc_loader->get_documentation(
+          EXPORTING
+              iv_obj_name      = lv_object_name
+              iv_lang          = gc_default_lang    " Language Key
+          IMPORTING
+              et_documentation = lt_spro_docum
+              es_head          = ls_head
+              ).
+      ENDIF.
+
+      mo_doc->write_spro_documentation( it_documentation = lt_spro_docum ).
+    ENDIF.
+
+
+
+
+
+
 * Process all keys belonging to current object
-      LOOP AT t_e071k ASSIGNING <fs_e071k> FROM lv_from.
+    LOOP AT t_e071k ASSIGNING <fs_e071k> FROM lv_from.
 
-        AT NEW viewname.
-
-          DATA:
-            ev_name     TYPE string,
-            ev_activity TYPE string,
-            ev_textline TYPE string.
-
-          ev_activity = <fs_e071k>-mastername.
-
-          DATA(lv_ca) = 'View Cluster ' ##NO_TEXT.
-          DATA(lv_separator) = ': ' ##NO_TEXT.
-
-          SELECT SINGLE text FROM vcldirt
-            INTO @DATA(lv_view_cluster_descr)
-            WHERE vclname = @ev_activity AND spras = @p_lang.
-
-          IF lv_view_cluster_descr CO ''.
-            SELECT SINGLE text FROM vcldirt
-            INTO @lv_view_cluster_descr
-            WHERE vclname = @ev_activity AND spras = @gc_default_lang.
-          ENDIF.
+      AT NEW viewname.
 
 
-          CONCATENATE lv_ca ev_activity lv_separator lv_view_cluster_descr
-          INTO ev_textline RESPECTING BLANKS.
 
+      ENDAT.
 
-          CALL METHOD mo_doc->('WRITE_TEXT')
-            EXPORTING
-              textline   = ev_textline
-              line_style = 'Heading1' ##NO_TEXT.
-
-        ENDAT.
-
-        AT NEW objname.
+      AT NEW objname.
 
 * Get information about all fields of the table
-          REFRESH lt_dd03p.
-          CALL FUNCTION 'DDIF_TABL_GET'
-            EXPORTING
-              name          = <fs_e071k>-objname
-              langu         = sy-langu
-            TABLES
-              dd03p_tab     = lt_dd03p
-            EXCEPTIONS
-              illegal_input = 1
-              OTHERS        = 2.
+        REFRESH lt_dd03p.
+        CALL FUNCTION 'DDIF_TABL_GET'
+          EXPORTING
+            name          = <fs_e071k>-objname
+          TABLES
+            dd03p_tab     = lt_dd03p
+          EXCEPTIONS
+            illegal_input = 1
+            OTHERS        = 2.
 
-          IF sy-subrc <> 0 OR lt_dd03p[] IS INITIAL.
-            EXIT.
-          ENDIF.
+        IF sy-subrc <> 0 OR lt_dd03p[] IS INITIAL.
+          EXIT.
+        ENDIF.
 
 * Create the type object for field E071K-TABKEY
-          lo_tabkeydescr = cl_abap_typedescr=>describe_by_name( 'E071K-TABKEY' ).
+        lo_tabkeydescr = cl_abap_typedescr=>describe_by_name( 'E071K-TABKEY' ).
 
 * Loop thru all key fields of the table:
 *   1) Building a list of all key fields
 *   2) Building a list of all CHARLIKE key fields that fit fields E071K-TABKEY
 *   3) Building the WHERE clause for the SELECT to be used for data retrieval, using FOR ALL ENTRIES
 *   4) Setting up table LT_FIELDS, with all key fields
-          DELETE lt_dd03p WHERE keyflag      = abap_false OR
-                                fieldname(1) = '.'.
-          CLEAR: lv_keyfields, lv_charfields, lv_where.
-          lv_complete_keys = abap_true.
-          REFRESH lt_fields.
-          LOOP AT lt_dd03p ASSIGNING <fs_dd03p>.
+        DELETE lt_dd03p WHERE keyflag      = abap_false OR
+                              fieldname(1) = '.'.
+        CLEAR: lv_keyfields, lv_charfields, lv_where.
+        lv_complete_keys = abap_true.
+        REFRESH lt_fields.
+        LOOP AT lt_dd03p ASSIGNING <fs_dd03p>.
 
 * Build the list of all key fields names
-            CONCATENATE lv_keyfields <fs_dd03p>-fieldname INTO lv_keyfields
-              SEPARATED BY space.
+          CONCATENATE lv_keyfields <fs_dd03p>-fieldname INTO lv_keyfields
+            SEPARATED BY space.
 
 * Add key field to the key type strucuture of the object keys table
-            APPEND INITIAL LINE TO lt_fields ASSIGNING <fs_field>.
-            <fs_field>-name = <fs_dd03p>-fieldname.
-            <fs_field>-type ?= cl_abap_structdescr=>describe_by_name( <fs_dd03p>-rollname ).
+          APPEND INITIAL LINE TO lt_fields ASSIGNING <fs_field>.
+          <fs_field>-name = <fs_dd03p>-fieldname.
+          <fs_field>-type ?= cl_abap_structdescr=>describe_by_name( <fs_dd03p>-rollname ).
 
-            CHECK lv_complete_keys = abap_true.
+          CHECK lv_complete_keys = abap_true.
 
 * Check if structure containing all key fields of the View table is CHARLIKE
-            IF <fs_field>-type->type_kind CN 'CNDT'.
-              lv_complete_keys = abap_false.
-              CONTINUE.
-            ENDIF.
+          IF <fs_field>-type->type_kind CN 'CNDT'.
+            lv_complete_keys = abap_false.
+            CONTINUE.
+          ENDIF.
 
 * Build the type object for key fields found so far, to help answer the following question below
-            lo_structdescr = cl_abap_structdescr=>create( lt_fields ).
+          lo_structdescr = cl_abap_structdescr=>create( lt_fields ).
 
 * If I add current CHARLIKE key field to key structure,
 *   will it make the CHARLIKE key structure larger than field E071K-TABKEY ?
-            IF lo_structdescr->length > lo_tabkeydescr->length.
-              lv_complete_keys = abap_false.
-              CONTINUE.
-            ENDIF.
+          IF lo_structdescr->length > lo_tabkeydescr->length.
+            lv_complete_keys = abap_false.
+            CONTINUE.
+          ENDIF.
 
 * Build the list of CHARLIKE key fields names
-            CONCATENATE lv_charfields <fs_dd03p>-fieldname INTO lv_charfields
-              SEPARATED BY space.
+          CONCATENATE lv_charfields <fs_dd03p>-fieldname INTO lv_charfields
+            SEPARATED BY space.
 
 * Build the 'FIELDNAME = <FS_T_TAKEYS>-FIELDNAME' WHERE condition
-            CONCATENATE '<FS_T_TABKEYS>-' <fs_dd03p>-fieldname INTO lv_str.
-            CONCATENATE lv_where 'AND' <fs_dd03p>-fieldname '=' lv_str INTO lv_where SEPARATED BY space.
+          CONCATENATE '<FS_T_TABKEYS>-' <fs_dd03p>-fieldname INTO lv_str.
+          CONCATENATE lv_where 'AND' <fs_dd03p>-fieldname '=' lv_str INTO lv_where SEPARATED BY space.
 
-          ENDLOOP.
+        ENDLOOP.
 
 * Table has no key fields (?!?)
-          IF sy-subrc <> 0.
-            lv_str = `Table has no key fields`  ##NO_TEXT.
+        IF sy-subrc <> 0.
+          lv_str = `Table has no key fields`  ##NO_TEXT.
 
-          ENDIF.
+        ENDIF.
 
 * Get rid of the " " at the beginning of key fuields list
-          SHIFT lv_keyfields LEFT BY 1 PLACES.
+        SHIFT lv_keyfields LEFT BY 1 PLACES.
 
 * List of table key fields
-          SPLIT lv_keyfields AT space INTO TABLE lt_keyfields.
+        SPLIT lv_keyfields AT space INTO TABLE lt_keyfields.
 
 * Get rid of the " " at the beginning of CHAR key fields list
-          SHIFT lv_charfields LEFT BY 1 PLACES.
+        SHIFT lv_charfields LEFT BY 1 PLACES.
 
 * List of table CHARLIKE key fields
-          SPLIT lv_charfields AT space INTO TABLE lt_charfields.
+        SPLIT lv_charfields AT space INTO TABLE lt_charfields.
 
 * Get rid of the " AND " at the beginning of the WHERE clause
-          SHIFT lv_where LEFT BY 5 PLACES.
+        SHIFT lv_where LEFT BY 5 PLACES.
 
 * Creates the dynamic table with key fields of the data table
-          lo_structdescr = cl_abap_structdescr=>create( lt_fields ).
-          lo_tabledescr = cl_abap_tabledescr=>create( p_line_type = lo_structdescr
-                                                      p_key       = lt_keyfields ).
-          CREATE DATA lr_tabkeys TYPE HANDLE lo_tabledescr.
-          ASSIGN lr_tabkeys->* TO <fs_t_tabkeys>.
+        lo_structdescr = cl_abap_structdescr=>create( lt_fields ).
+        lo_tabledescr = cl_abap_tabledescr=>create( p_line_type = lo_structdescr
+                                                    p_key       = lt_keyfields ).
+        CREATE DATA lr_tabkeys TYPE HANDLE lo_tabledescr.
+        ASSIGN lr_tabkeys->* TO <fs_t_tabkeys>.
 
-        ENDAT.
+      ENDAT.
 
 * If we are not storing complete keys, get rid of the "*" at the end of key
-        CLEAR lv_str.
-        DATA lv_str1 TYPE trobj_name.
-        lv_len = strlen( <fs_e071k>-tabkey ) - 1.
-        IF lv_len >= 0.
-          IF lv_complete_keys = abap_false AND
-             <fs_e071k>-tabkey+lv_len(1) = '*'.
-            lv_str1 = <fs_e071k>-tabkey(lv_len).
-          ELSE.
-            lv_str1 = <fs_e071k>-tabkey.
-            lv_len = lv_len + 1.
-          ENDIF.
+      CLEAR lv_str.
+      DATA lv_str1 TYPE trobj_name.
+      lv_len = strlen( <fs_e071k>-tabkey ) - 1.
+      IF lv_len >= 0.
+        IF lv_complete_keys = abap_false AND
+           <fs_e071k>-tabkey+lv_len(1) = '*'.
+          lv_str1 = <fs_e071k>-tabkey(lv_len).
+        ELSE.
+          lv_str1 = <fs_e071k>-tabkey.
+          lv_len = lv_len + 1.
         ENDIF.
+      ENDIF.
 
 
 * Creates a new key in the keys table
-        APPEND INITIAL LINE TO <fs_t_tabkeys> ASSIGNING <fs_s_tabkey>.
+      APPEND INITIAL LINE TO <fs_t_tabkeys> ASSIGNING <fs_s_tabkey>.
 *      <fs_s_tabkey> = lv_str.
-        MOVE lv_str1 TO <fs_s_tabkey>+0(lv_len).
+      MOVE lv_str1 TO <fs_s_tabkey>+0(lv_len).
 
-        AT END OF objname.
+      AT END OF objname.
 
 * Get rid of duplicate keys in the keys table
-          SORT <fs_t_tabkeys> BY table_line.
-          IF lv_complete_keys = abap_true.
-            DELETE ADJACENT DUPLICATES FROM <fs_t_tabkeys> COMPARING ALL FIELDS.
-          ELSEIF lt_charfields[] IS NOT INITIAL.
+        SORT <fs_t_tabkeys> BY table_line.
+        IF lv_complete_keys = abap_true.
+          DELETE ADJACENT DUPLICATES FROM <fs_t_tabkeys> COMPARING ALL FIELDS.
+        ELSEIF lt_charfields[] IS NOT INITIAL.
 
 * Create a table with same fields as LT_TABKEYS, but with CHAR key fields
-            lo_tabledescr = cl_abap_tabledescr=>create( p_line_type = lo_structdescr
-                                                        p_key       = lt_charfields ).
-            CREATE DATA lr_tabkeys2 TYPE HANDLE lo_tabledescr.
-            ASSIGN lr_tabkeys2->* TO <fs_t_tabkeys2>.
+          lo_tabledescr = cl_abap_tabledescr=>create( p_line_type = lo_structdescr
+                                                      p_key       = lt_charfields ).
+          CREATE DATA lr_tabkeys2 TYPE HANDLE lo_tabledescr.
+          ASSIGN lr_tabkeys2->* TO <fs_t_tabkeys2>.
 
 * Get rid of all CHARLIKE key duplicates
-            <fs_t_tabkeys2>[] = <fs_t_tabkeys>[].
-            DELETE ADJACENT DUPLICATES FROM <fs_t_tabkeys2>.
-            <fs_t_tabkeys>[] = <fs_t_tabkeys2>[].
+          <fs_t_tabkeys2>[] = <fs_t_tabkeys>[].
+          DELETE ADJACENT DUPLICATES FROM <fs_t_tabkeys2>.
+          <fs_t_tabkeys>[] = <fs_t_tabkeys2>[].
 
-          ENDIF.
+        ENDIF.
 
 * Only reuse the keys table as data table if data table fields are all key fields and
 *   if data table allows storing complete keys in the request
-          DATA length1 TYPE i.
-          DATA length2 TYPE i.
-          DESCRIBE TABLE lt_dd03p LINES length1.
-          DESCRIBE TABLE lt_keyfields LINES length2.
+        DATA length1 TYPE i.
+        DATA length2 TYPE i.
+        DESCRIBE TABLE lt_dd03p LINES length1.
+        DESCRIBE TABLE lt_keyfields LINES length2.
 
-          IF length1 = length2.
+        IF length1 = length2.
 *           and lv_complete_keys = abap_true.
 
 * If not, then create the table that will contain the records to be written
-            CREATE DATA lr_t_table TYPE STANDARD TABLE OF (<fs_e071k>-objname) WITH KEY (lt_keyfields).
-            ASSIGN lr_t_table->* TO <fs_t_table>.
+          CREATE DATA lr_t_table TYPE STANDARD TABLE OF (<fs_e071k>-objname) WITH KEY (lt_keyfields).
+          ASSIGN lr_t_table->* TO <fs_t_table>.
 
 * And select the desired records from database using CHARLIKE keys table <FS_T_TABKEYS> as the key
-            IF <fs_t_tabkeys>[] IS NOT INITIAL.
-              SELECT  *
-                INTO  TABLE <fs_t_table>
-                FROM  (<fs_e071k>-objname)
-                CLIENT SPECIFIED
-                FOR ALL ENTRIES IN <fs_t_tabkeys>
-                WHERE (lv_where).
-            ENDIF.
+          IF <fs_t_tabkeys>[] IS NOT INITIAL.
+            SELECT  *
+              INTO  TABLE <fs_t_table>
+              FROM  (<fs_e071k>-objname)
+              CLIENT SPECIFIED
+              FOR ALL ENTRIES IN <fs_t_tabkeys>
+              WHERE (lv_where).
+          ENDIF.
 
-          ELSE.
+        ELSE.
 
 * If yes, the table <fs_t_tabkeys> already contains all fields that should be written
-            ASSIGN <fs_t_tabkeys> TO <fs_t_table>.
+          ASSIGN <fs_t_tabkeys> TO <fs_t_table>.
 
-          ENDIF.
+        ENDIF.
 
-          IF <fs_t_table>[] IS NOT INITIAL.
+        IF <fs_t_table>[] IS NOT INITIAL.
 
 * Get rid of duplicate entries in the data table
-            REFRESH lt_sortfields.
-            LOOP AT lt_keyfields ASSIGNING <fs_keyfield>.
-              APPEND INITIAL LINE TO lt_sortfields ASSIGNING <fs_sortfield>.
-              <fs_sortfield>-name = <fs_keyfield>.
-            ENDLOOP.
-            SORT <fs_t_table> BY (lt_sortfields).
-            DELETE ADJACENT DUPLICATES FROM <fs_t_table>.
+          REFRESH lt_sortfields.
+          LOOP AT lt_keyfields ASSIGNING <fs_keyfield>.
+            APPEND INITIAL LINE TO lt_sortfields ASSIGNING <fs_sortfield>.
+            <fs_sortfield>-name = <fs_keyfield>.
+          ENDLOOP.
+          SORT <fs_t_table> BY (lt_sortfields).
+          DELETE ADJACENT DUPLICATES FROM <fs_t_table>.
 
-            CALL METHOD mo_doc->('WRITE_TABLE_ENH')
-              EXPORTING
-                content    = <fs_t_table>
-                table_name = <fs_e071k>-objname.
-            CALL METHOD mo_doc->('WRITE_NEWPAGE').
+          CALL METHOD mo_doc->('WRITE_TABLE_ENH')
+            EXPORTING
+              content    = <fs_t_table>
+              table_name = <fs_e071k>-objname.
+          CALL METHOD mo_doc->('WRITE_NEWPAGE').
 
-          ENDIF.
+        ENDIF.
 
-        ENDAT.
+      ENDAT.
 
 * If it's the last key for current object, exit
-        AT END OF viewname.
-        ENDAT.
+      AT END OF viewname.
+      ENDAT.
 
 *Remove CDAT NODE
 *
 ** If it's the last key for current object, exit
-        AT END OF mastername.
+      AT END OF mastername.
 *
 ** Inserts the CDAT node into the XML document
 *        xmldoc->append_child( lo_cdat_node ).
-          EXIT.
+        EXIT.
 
-        ENDAT.
+      ENDAT.
 
-      ENDLOOP.
-
-    ENDIF.
+    ENDLOOP.
 
     <fs_e071>-used = abap_true.
 
@@ -6608,6 +7592,7 @@ CLASS zmin_cl_req_loader IMPLEMENTATION.
     CONCATENATE '(' sy-cprog ')s_req[]' INTO lv_str.
     ASSIGN (lv_str) TO <fs_r_reqnugg>.
 
+
 * Get type of all requests supplied
     SELECT  trkorr trfunction
       INTO  TABLE lt_trfunction
@@ -6623,7 +7608,7 @@ CLASS zmin_cl_req_loader IMPLEMENTATION.
         <fs_trkorr> = <fs_trfunction>-trkorr.
 
 * If it's a request, search for its tasks
-      ELSEIF <fs_trfunction>-trfunction CO 'KW'. " Workbench or Customizing
+      ELSEIF <fs_trfunction>-trfunction = 'W'. " Customizing
 
         APPEND INITIAL LINE TO lt_trkorr ASSIGNING <fs_trkorr>.
         <fs_trkorr> = <fs_trfunction>-trkorr.
@@ -6677,6 +7662,14 @@ CLASS zmin_cl_req_loader IMPLEMENTATION.
       ENDIF.
 
     ENDIF.
+
+    DATA ls_style TYPE cl_word=>ty_character_style_effect.
+    ls_style-bold = cl_word=>c_true.
+    ls_style-size = 16.
+    ls_style-font = cl_word=>c_font_calibri.
+
+    DATA ls_par_style TYPE cl_word=>ty_paragraph_style_effect.
+    ls_par_style-alignment = cl_word=>c_align_center.
 
 
 
