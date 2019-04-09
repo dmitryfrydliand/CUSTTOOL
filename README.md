@@ -1,4 +1,4 @@
-# LXCUSTTOOL
+# CUSTTOOL
 SAP Customizing Documentation tool
 
 Quite often customers request documentation of the entire customization effort made during the implementation and especially the PoC projects. Not talking about how useful it is but nevertheless document is a part of the contract and must be delivered.
@@ -9,7 +9,7 @@ How did we solve this normally? I did the stupid monkey routine of taking hundre
 
 That's how I came to the idea that this should have already been automated. If transport requests have all the changes we made, there should be a way to download such a report.  But, really? I have not found anything, neither in Google nor in SCN/SolMan.
 
-So we at LeverX decided to create this solution ourselves and share it with the community.
+So we at decided to create this solution ourselves and share it with the community.
  
 Some answers to the questions you might already have:
 
