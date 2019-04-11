@@ -41,5 +41,6 @@ What does the template look like? See the template file.
 What does the result look like? See the example file.
 
 In case of any questions do not hesitate to contact me https://www.linkedin.com/in/dmitryfrydliand/ 
+
 Description of the tool is also available here https://blogs.sap.com/2017/11/30/sap-customizing-documentation-generation-tool/
 
