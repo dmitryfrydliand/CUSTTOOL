@@ -13,7 +13,7 @@ So we at decided to create this solution ourselves and share it with the communi
  
 Some answers to the questions you might already have:
 
-What is this solution? It’s an SAP GUI report designed to be executed in SE38. It takes customizing transports and Microsoft Word (project) template as an input and produces another MS Word document containing all the customized entries with descriptions as an output.
+What is this solution? It’s an SAP GUI report designed to be executed in SE38. It takes customizing transports (released tasks!) and Microsoft Word (project) template as an input and produces another MS Word document containing all the customized entries with descriptions as an output.
 
 How I can install it?  
 1.	Download the code and the template from either GitHub or here 
