@@ -36,9 +36,10 @@ Can I use this freely? Yes, but we would highly appreciate the feedback and revi
 
 Do you plan to support the report? Why not, if you have any ideas what needs to be extended, or see any bugs, please let me know.
 
-What does the template look like? See the screenshots or download the template.
+What does the template look like? See the template file.
 
-What does the result look like? See the screenshots or download the example file.
+What does the result look like? See the example file.
 
-
+In case of any questions do not hesitate to contact me https://www.linkedin.com/in/dmitryfrydliand/ 
+Description of the tool is also available here https://blogs.sap.com/2017/11/30/sap-customizing-documentation-generation-tool/
 
