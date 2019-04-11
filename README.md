@@ -17,12 +17,12 @@ What is this solution? It’s an SAP GUI report designed to be executed in SE38.
 
 How I can install it?  
 1.	Download the code and the template from either GitHub or here 
-2.	Create a report ZREP_LX_CUST_DOC on your NetWeaver system in transaction SE38 
+2.	Create a report ZREP_CUST_DOC on your NetWeaver system in transaction SE38 
 3.	Copy the code into the report and activate it. 
 
 MS Word template has its own instructions how to change the logo and customer/project names.
 
-How does it work? We reused the SAPLink source code (thanks to them) to get the contents of the customizing transports, then the solution selects the complete entry from the customizing table/view, reads all the fields/table/view descriptions from DDIC in the given language and downloads all the information in a readable way to the MS Word document as per template provided by the user.
+How does it work? We reused the SAPLink source code (thanks to them) to get the content of the customizing transports, then the solution selects the complete entry from the customizing table/view, reads all the fields/table/view descriptions from DDIC in the given language and downloads all the information in a readable way to the MS Word document as per template provided by the user.
 
 Is it safe to install? Yes, as you can audit the code before installation. Also, please only create the report in the development/customizing system and never in a production environment.
 
