@@ -2822,7 +2822,7 @@ DATA: gv_url       TYPE string,
 
 
 
-TABLES: rlgrap, t685t.
+TABLES: rlgrap.
 
 
 
