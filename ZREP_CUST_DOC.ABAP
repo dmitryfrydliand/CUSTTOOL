@@ -1,4 +1,4 @@
-﻿*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
 *& Report ZREP_CUST_DOC
 *&---------------------------------------------------------------------*
 *& Report generating the customizing documendation
@@ -2699,6 +2699,14 @@ CLASS zloc_cl_req_loader  DEFINITION  FINAL.
         iv_obj_type TYPE trobjtype.
 
 
+* { change 20210928
+    METHODS eject_inf_about_tabu
+
+      IMPORTING
+
+        iv_obj_type TYPE trobjtype.
+* endchange 20210928 }
+
 
     CLASS-METHODS init_plugin
 
@@ -3355,9 +3363,7 @@ START-OF-SELECTION.
 
 
   wa_obj_type-sign = 'I'.
-
   wa_obj_type-option = 'EQ'.
-
   wa_obj_type-low = 'CDAT'.
 
   APPEND wa_obj_type TO ra_obj_type.
@@ -3365,9 +3371,7 @@ START-OF-SELECTION.
 
 
   wa_obj_type-sign = 'I'.
-
   wa_obj_type-option = 'EQ'.
-
   wa_obj_type-low = 'VDAT'.
 
   APPEND wa_obj_type TO ra_obj_type.
@@ -3375,21 +3379,25 @@ START-OF-SELECTION.
 
 
   wa_obj_type-sign = 'I'.
-
   wa_obj_type-option = 'EQ'.
-
   wa_obj_type-low = 'TDAT'.
 
   APPEND wa_obj_type TO ra_obj_type.
 
 
+*{ change 20210928
+  wa_obj_type-sign = 'I'.
+  wa_obj_type-option = 'EQ'.
+  wa_obj_type-low = 'TABU'.
+
+  APPEND wa_obj_type TO ra_obj_type.
+* endchange 20210928 }
 
 
 
-
-
-  SELECT object obj_name
-
+*{ change 20210928
+  SELECT DISTINCT object obj_name  "SELECT object obj_name
+* endchange 20210928 }
   FROM  e071
 
   INTO TABLE it_requestobject
@@ -3409,9 +3417,9 @@ START-OF-SELECTION.
     reqname = l_trkorr.
 
   ELSE.
-
-    MESSAGE s208(00) WITH 'No R3TR objects in request' ##NO_TEXT.
-
+* { change 20210928
+    MESSAGE s208(00) WITH 'No R3TR or CDAT/VDAT/TDAT/TABU objects in request'. ##NO_TEXT. "MESSAGE s208(00) WITH 'No R3TR objects in request'
+* endchange 20210928 }
     EXIT.
 
   ENDIF.
@@ -12771,9 +12779,9 @@ CLASS zloc_cl_req_loader IMPLEMENTATION.
                 INTO  TABLE <fs_t_table>
 
                 FROM  (<fs_e071k>-objname)
-
-                CLIENT SPECIFIED
-
+* { change 20210928
+                "CLIENT SPECIFIED
+* endchange 20210928 }
                 FOR ALL ENTRIES IN <fs_t_tabkeys>
 
                 WHERE (lv_where).
@@ -13495,9 +13503,9 @@ CLASS zloc_cl_req_loader IMPLEMENTATION.
                 INTO  TABLE <fs_t_table>
 
                 FROM  (<fs_e071k>-objname)
-
-                CLIENT SPECIFIED
-
+* { change 20210928
+                "CLIENT SPECIFIED
+* endchange 20210928 }
                 FOR ALL ENTRIES IN <fs_t_tabkeys>
 
                 WHERE (lv_where).
@@ -14226,9 +14234,9 @@ CLASS zloc_cl_req_loader IMPLEMENTATION.
               INTO  TABLE <fs_t_table>
 
               FROM  (<fs_e071k>-objname)
-
-              CLIENT SPECIFIED
-
+* { change 20210928
+                "CLIENT SPECIFIED
+* endchange 20210928 }
               FOR ALL ENTRIES IN <fs_t_tabkeys>
 
               WHERE (lv_where).
@@ -14338,17 +14346,728 @@ CLASS zloc_cl_req_loader IMPLEMENTATION.
 
 
 
+* { change 20210928
+  METHOD eject_inf_about_tabu.
+
+
+
+
+
+    TYPES: BEGIN OF ty_vdat,
+
+             name     TYPE dd02v-tabname,
+
+             activity TYPE e071-activity,
+
+           END OF ty_vdat.
+
+
+
+    TYPES: BEGIN OF ty_tabu,
+
+             tabname TYPE dd02v-tabname,
+
+           END OF ty_tabu.
+
+
+
+    DATA: lv_str           TYPE string,
+
+          lv_objtype       TYPE string,
+
+          lv_from          TYPE sy-tabix,
+
+          lv_len           TYPE i,
+
+          lv_complete_keys TYPE abap_bool,
+
+          lv_charfields    TYPE string,
+
+          lv_keyfields     TYPE string,
+
+          lv_where         TYPE string,
+
+
+
+          lr_t_table       TYPE REF TO data,
+
+          lr_s_table       TYPE REF TO data,
+
+          lr_tabkeys       TYPE REF TO data,
+
+          lr_tabkeys2      TYPE REF TO data,
+
+
+
+          lt_dd03p         TYPE STANDARD TABLE OF dd03p,
+
+          lt_fields        TYPE cl_abap_structdescr=>component_table,
+
+          lt_keyfields     TYPE abap_keydescr_tab,
+
+          lt_charfields    TYPE abap_keydescr_tab,
+
+          lt_sortfields    TYPE abap_sortorder_tab,
+
+
+
+          lo_structdescr   TYPE REF TO cl_abap_structdescr,
+
+          lo_tabledescr    TYPE REF TO cl_abap_tabledescr,
+
+          lo_tabkeydescr   TYPE REF TO cl_abap_typedescr,
+
+
+
+          lo_vdat_node     TYPE REF TO if_ixml_element,
+
+          lo_tabu_node     TYPE REF TO if_ixml_element,
+
+          lo_datarow_node  TYPE REF TO if_ixml_element,
+
+          ls_vdat          TYPE ty_vdat,
+
+          ls_tabu          TYPE ty_tabu.
+
+
+
+    FIELD-SYMBOLS: <fs_e071>       LIKE LINE OF t_e071,
+
+                   <fs_e071k>      LIKE LINE OF t_e071k,
+
+                   <fs_t_table>    TYPE STANDARD TABLE,
+
+                   <fs_s_table>    TYPE any,
+
+                   <fs_t_tabkeys>  TYPE STANDARD TABLE,
+
+                   <fs_t_tabkeys2> TYPE STANDARD TABLE,
+
+                   <fs_s_tabkey>   TYPE any,
+
+                   <fs_field>      LIKE LINE OF lt_fields,
+
+                   <fs_dd03p>      LIKE LINE OF lt_dd03p,
+
+                   <fs_sortfield>  LIKE LINE OF lt_sortfields,
+
+                   <fs_keyfield>   LIKE LINE OF lt_keyfields.
+
+
+
+    lv_objtype = iv_obj_type.
+
+
+
+* Look for the first task activity not yet processed
+
+    READ TABLE t_e071 ASSIGNING <fs_e071>
+
+      WITH KEY obj_name = objname
+
+               used     = space
+
+      BINARY SEARCH.
+
+
+
+    IF sy-subrc <> 0.
+
+      EXIT.
+
+    ENDIF.
+
+
+
+* Position on the first key of the object being processed
+
+    READ TABLE t_e071k TRANSPORTING NO FIELDS WITH KEY trkorr     = <fs_e071>-trkorr
+
+                                                       activity   = <fs_e071>-activity
+
+                                                       mastername = <fs_e071>-obj_name.
+
+
+
+    IF sy-subrc = 0.
+
+
+
+      lv_from = sy-tabix.
+
+
+
+* Process all keys belonging to current object
+
+      LOOP AT t_e071k ASSIGNING <fs_e071k> FROM lv_from.
+
+
+
+        AT NEW mastername.
+
+
+
+          DATA:
+
+            lv_obj_name TYPE ddobjname,
+
+            ls_dd25v_wa TYPE dd25v,
+
+            ev_name     TYPE string,
+
+            ev_activity TYPE string,
+
+            ev_textline TYPE string.
+
+
+
+          ev_activity = <fs_e071k>-mastername.
+
+          lv_obj_name = me->objname.
+
+
+
+          CALL FUNCTION 'DDIF_VIEW_GET'
+            EXPORTING
+              langu    = p_lang
+              name     = lv_obj_name
+            IMPORTING
+              dd25v_wa = ls_dd25v_wa.
+
+
+
+          IF ls_dd25v_wa-ddtext = ''.
+
+            CALL FUNCTION 'DDIF_VIEW_GET'
+              EXPORTING
+                langu    = gc_default_lang
+                name     = lv_obj_name
+              IMPORTING
+                dd25v_wa = ls_dd25v_wa.
+
+          ENDIF.
+
+
+
+
+
+          DATA(lv_ca) = 'Table ' ##NO_TEXT .
+
+
+
+          CONCATENATE lv_ca ev_activity ': ' ls_dd25v_wa-ddtext
+
+          INTO ev_textline RESPECTING BLANKS.
+
+
+
+          CALL METHOD mo_doc->('WRITE_TEXT')
+            EXPORTING
+              textline   = ev_textline
+              line_style = 'Heading1' ##NO_TEXT.
+
+
+
+
+
+          DATA lo_spro_doc_loader TYPE REF TO zloc_cl_spro_doc_loader.
+
+
+
+          lo_spro_doc_loader = zloc_cl_spro_doc_loader=>get_instance( ).
+
+
+
+          DATA lv_object_name TYPE trobj_name.
+
+          lv_object_name = ev_activity.
+
+          DATA lt_spro_docum TYPE zloc_cl_spro_doc_loader=>ty_t_itf_lines.
+
+          DATA lv_document TYPE string.
+
+          DATA ls_head TYPE thead.
+
+          DATA lo_itf_to_xml_convertor TYPE REF TO cl_note_itf2xml.
+
+
+
+          lo_itf_to_xml_convertor = NEW #( ).
+
+
+
+          lo_spro_doc_loader->get_documentation(
+
+            EXPORTING
+
+              iv_obj_name      = lv_object_name
+
+              iv_lang          = p_lang    " Language Key
+
+            IMPORTING
+
+              et_documentation = lt_spro_docum
+
+              es_head          = ls_head
+
+          ).
+
+
+
+          IF lines( lt_spro_docum ) = 0 AND p_lang <> gc_default_lang.
+
+
+
+            lo_spro_doc_loader->get_documentation(
+
+              EXPORTING
+
+                  iv_obj_name      = lv_object_name
+
+                  iv_lang          = gc_default_lang    " Language Key
+
+              IMPORTING
+
+                  et_documentation = lt_spro_docum
+
+                  es_head          = ls_head
+
+                  ).
+
+          ENDIF.
+
+
+
+          IF lines( lt_spro_docum ) <> 0.
+
+            mo_doc->write_spro_documentation( it_documentation = lt_spro_docum ).
+
+          ENDIF.
+
+
+
+        ENDAT.
+
+
+
+        AT NEW objname.
+
+
+
+* Get information about all fields of the table
+
+          REFRESH lt_dd03p.
+
+          CALL FUNCTION 'DDIF_TABL_GET'
+            EXPORTING
+              name          = <fs_e071k>-objname
+              langu         = sy-langu
+            TABLES
+              dd03p_tab     = lt_dd03p
+            EXCEPTIONS
+              illegal_input = 1
+              OTHERS        = 2.
+
+
+
+          IF sy-subrc <> 0 OR lt_dd03p[] IS INITIAL.
+
+            MESSAGE s208(00) WITH 'Table does not exist in the active state' ##NO_TEXT.
+
+            EXIT.
+
+          ENDIF.
+
+
+
+* Create the type object for field E071K-TABKEY
+
+          lo_tabkeydescr = cl_abap_typedescr=>describe_by_name( `E071K-TABKEY` ).
+
+
+
+* Loop thru all key fields of the table:
+
+*   1) Building a list of all key fields
+
+*   2) Building a list of all CHARLIKE key fields that fit fields E071K-TABKEY
+
+*   3) Building the WHERE clause for the SELECT to be used for data retrieval, using FOR ALL ENTRIES
+
+*   4) Setting up table LT_FIELDS, with all key fields
+
+          DELETE lt_dd03p WHERE keyflag      = abap_false OR
+
+                                fieldname(1) = '.'.
+
+          CLEAR: lv_keyfields, lv_charfields, lv_where.
+
+          lv_complete_keys = abap_true.
+
+          REFRESH lt_fields.
+
+          LOOP AT lt_dd03p ASSIGNING <fs_dd03p>.
+
+
+
+* Build the list of all key fields names
+
+            CONCATENATE lv_keyfields <fs_dd03p>-fieldname INTO lv_keyfields
+
+              SEPARATED BY space.
+
+
+
+* Add key field to the key type strucuture of the object keys table
+
+            APPEND INITIAL LINE TO lt_fields ASSIGNING <fs_field>.
+
+            <fs_field>-name = <fs_dd03p>-fieldname.
+
+            <fs_field>-type ?= cl_abap_structdescr=>describe_by_name( <fs_dd03p>-rollname ).
+
+
+
+            CHECK lv_complete_keys = abap_true.
+
+
+
+* Check if structure containing all key fields of the View table is CHARLIKE
+
+            IF <fs_field>-type->type_kind CN 'CNDT'.
+
+              lv_complete_keys = abap_false.
+
+              CONTINUE.
+
+            ENDIF.
+
+
+
+* Build the type object for key fields found so far, to help answer the following question below
+
+            lo_structdescr = cl_abap_structdescr=>create( lt_fields ).
+
+
+
+* If I add current CHARLIKE key field to key structure,
+
+*   will it make the CHARLIKE key structure larger than field E071K-TABKEY ?
+
+            IF lo_structdescr->length > lo_tabkeydescr->length.
+
+              lv_complete_keys = abap_false.
+
+              CONTINUE.
+
+            ENDIF.
+
+
+
+* Build the list of CHARLIKE key fields names
+
+            CONCATENATE lv_charfields <fs_dd03p>-fieldname INTO lv_charfields
+
+              SEPARATED BY space.
+
+
+
+* Build the 'FIELDNAME = <FS_T_TAKEYS>-FIELDNAME' WHERE condition
+
+            CONCATENATE '<FS_T_TABKEYS>-' <fs_dd03p>-fieldname INTO lv_str.
+
+            CONCATENATE lv_where 'AND' <fs_dd03p>-fieldname '=' lv_str INTO lv_where SEPARATED BY space.
+
+
+
+          ENDLOOP.
+
+
+
+* Table has no key fields (?!?)
+
+          IF sy-subrc <> 0.
+
+            lv_str = `Table has no key fields` ##NO_TEXT.
+
+          ENDIF.
+
+
+
+* Get rid of the " " at the beginning of key fuields list
+
+          SHIFT lv_keyfields LEFT BY 1 PLACES.
+
+
+
+* List of table key fields
+
+          SPLIT lv_keyfields AT space INTO TABLE lt_keyfields.
+
+
+
+* Get rid of the " " at the beginning of CHAR key fields list
+
+          SHIFT lv_charfields LEFT BY 1 PLACES.
+
+
+
+* List of table CHARLIKE key fields
+
+          SPLIT lv_charfields AT space INTO TABLE lt_charfields.
+
+
+
+* Get rid of the " AND " at the beginning of the WHERE clause
+
+          SHIFT lv_where LEFT BY 5 PLACES.
+
+
+
+* Creates the dynamic table with key fields of the data table
+
+          lo_structdescr = cl_abap_structdescr=>create( lt_fields ).
+
+          lo_tabledescr = cl_abap_tabledescr=>create( p_line_type = lo_structdescr
+
+                                                      p_key       = lt_keyfields ).
+
+          CREATE DATA lr_tabkeys TYPE HANDLE lo_tabledescr.
+
+          ASSIGN lr_tabkeys->* TO <fs_t_tabkeys>.
+
+
+
+        ENDAT.
+
+
+
+* If we are not storing complete keys, get rid of the "*" at the end of key
+
+        CLEAR lv_str.
+
+        DATA lv_str1 TYPE trobj_name.
+
+        lv_len = strlen( <fs_e071k>-tabkey ) - 1.
+
+        IF lv_len >= 0.
+
+          IF lv_complete_keys = abap_false AND
+
+             <fs_e071k>-tabkey+lv_len(1) = '*'.
+
+            lv_str1 = <fs_e071k>-tabkey(lv_len).
+
+          ELSE.
+
+            lv_str1 = <fs_e071k>-tabkey.
+
+            lv_len = lv_len + 1.
+
+          ENDIF.
+
+        ENDIF.
+
+
+
+* Creates a new key in the keys table
+
+        APPEND INITIAL LINE TO <fs_t_tabkeys> ASSIGNING <fs_s_tabkey>.
+
+*      <fs_s_tabkey> = lv_str1.
+
+*       write lv_str1 to <fs_s_tabkey>.
+
+        MOVE lv_str1 TO <fs_s_tabkey>+0(lv_len).
+
+
+
+        AT END OF objname.
+
+
+
+* Get rid of duplicate keys in the keys table
+
+          SORT <fs_t_tabkeys> BY table_line.
+
+          IF lv_complete_keys = abap_true.
+
+            DELETE ADJACENT DUPLICATES FROM <fs_t_tabkeys> COMPARING ALL FIELDS.
+
+          ELSEIF lt_charfields[] IS NOT INITIAL.
+
+
+
+* Create a table with same fields as LT_TABKEYS, but with CHAR key fields
+
+            lo_tabledescr = cl_abap_tabledescr=>create( p_line_type = lo_structdescr
+
+                                                        p_key       = lt_charfields ).
+
+            CREATE DATA lr_tabkeys2 TYPE HANDLE lo_tabledescr.
+
+            ASSIGN lr_tabkeys2->* TO <fs_t_tabkeys2>.
+
+
+
+* Get rid of all CHARLIKE key duplicates
+
+            <fs_t_tabkeys2>[] = <fs_t_tabkeys>[].
+
+            DELETE ADJACENT DUPLICATES FROM <fs_t_tabkeys2>.
+
+            <fs_t_tabkeys>[] = <fs_t_tabkeys2>[].
+
+
+
+          ENDIF.
+
+
+
+* Only reuse the keys table as data table if data table fields are all key fields and
+
+*   if data table allows storing complete keys in the request
+
+
+
+          DATA length1 TYPE i.
+
+          DATA length2 TYPE i.
+
+          DESCRIBE TABLE lt_dd03p LINES length1.
+
+          DESCRIBE TABLE lt_keyfields LINES length2.
+
+
+
+          IF length1 = length2.
+
+*           and lv_complete_keys = abap_true.
+
+
+
+* If not, then create the table that will contain the records to be written
+
+            CREATE DATA lr_t_table TYPE STANDARD TABLE OF (<fs_e071k>-objname) WITH KEY (lt_keyfields).
+
+            ASSIGN lr_t_table->* TO <fs_t_table>.
+
+
+
+* And select the desired records from database using CHARLIKE keys table <FS_T_TABKEYS> as the key
+
+            IF <fs_t_tabkeys>[] IS NOT INITIAL.
+
+              SELECT  *
+
+                INTO  TABLE <fs_t_table>
+
+                FROM  (<fs_e071k>-objname)
+* { change 20210928
+                "CLIENT SPECIFIED
+* endchange 20210928 }
+                FOR ALL ENTRIES IN <fs_t_tabkeys>
+
+                WHERE (lv_where).
+
+            ENDIF.
+
+
+
+          ELSE.
+
+
+
+* If yes, the table <fs_t_tabkeys> already contains all fields that should be written
+
+            ASSIGN <fs_t_tabkeys> TO <fs_t_table>.
+
+
+
+          ENDIF.
+
+
+
+          IF <fs_t_table>[] IS NOT INITIAL.
+
+
+
+* Get rid of duplicate entries in the data table
+
+            REFRESH lt_sortfields.
+
+            LOOP AT lt_keyfields ASSIGNING <fs_keyfield>.
+
+              APPEND INITIAL LINE TO lt_sortfields ASSIGNING <fs_sortfield>.
+
+              <fs_sortfield>-name = <fs_keyfield>.
+
+            ENDLOOP.
+
+            SORT <fs_t_table> BY (lt_sortfields).
+
+            DELETE ADJACENT DUPLICATES FROM <fs_t_table>.
+
+
+
+
+
+            CALL METHOD mo_doc->('WRITE_TABLE_ENH')
+              EXPORTING
+                content    = <fs_t_table>
+                table_name = <fs_e071k>-objname.
+
+            CALL METHOD mo_doc->('WRITE_NEWPAGE').
+
+
+
+          ENDIF.
+
+
+
+        ENDAT.
+
+
+
+* If it's the last key for current object, exit
+
+        AT END OF mastername.
+
+
+
+          EXIT.
+
+
+
+        ENDAT.
+
+
+
+      ENDLOOP.
+
+
+
+    ENDIF.
+
+
+
+    <fs_e071>-used = abap_true.
+
+
+
+
+
+  ENDMETHOD.
+* endchange 20210928 }
+
+
+
+
   METHOD add_object_to_doc.
-
-
 
     objname = iv_obj_name.
 
-
-
     CASE iv_obj_type.
-
-
 
       WHEN 'VDAT'.
 
@@ -14358,13 +15077,10 @@ CLASS zloc_cl_req_loader IMPLEMENTATION.
           IMPORTING
             et_e071       = me->t_e071
             et_e071k      = me->t_e071k
-                            ).
-
+            ).
         CALL METHOD me->eject_inf_about_vdat
           EXPORTING
             iv_obj_type = iv_obj_type.
-
-
 
       WHEN 'TDAT'.
 
@@ -14374,13 +15090,10 @@ CLASS zloc_cl_req_loader IMPLEMENTATION.
           IMPORTING
             et_e071       = me->t_e071
             et_e071k      = me->t_e071k
-                            ).
-
+            ).
         CALL METHOD me->eject_inf_about_vdat
           EXPORTING
             iv_obj_type = iv_obj_type.
-
-
 
       WHEN 'CDAT'.
 
@@ -14390,12 +15103,24 @@ CLASS zloc_cl_req_loader IMPLEMENTATION.
           IMPORTING
             et_e071       = me->t_e071
             et_e071k      = me->t_e071k
-                            ).
-
+            ).
         CALL METHOD me->eject_inf_about_cdat
           EXPORTING
             iv_obj_type = iv_obj_type.
+* { change 20210928
+      WHEN 'TABU'.
 
+        CALL METHOD me->init_plugin(
+          EXPORTING
+            iv_mastertype = 'TABU'
+          IMPORTING
+            et_e071       = me->t_e071
+            et_e071k      = me->t_e071k
+            ).
+        CALL METHOD me->eject_inf_about_tabu
+          EXPORTING
+            iv_obj_type = iv_obj_type.
+* endchange 20210928 }
 
 
     ENDCASE.
