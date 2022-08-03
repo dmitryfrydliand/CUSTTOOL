@@ -5,13 +5,13 @@
 *& from customizing transport request(s) based on the template
 *& provided.
 *&---------------------- Version History ------------------------------*
+*& 
+*&
+*&  
 *&
 *&
-*&
-*&
-*&
-*&
-*&
+*& 20220728 - DUMP fix for the built-in types in Z-tables
+*& 20210928 - added TABU types
 *&---------------------------------------------------------------------*
 
 REPORT zrep_cust_doc.
@@ -2966,11 +2966,11 @@ SELECTION-SCREEN BEGIN OF BLOCK sb_input WITH FRAME TITLE sb_name1.
 
 
 
-SELECT-OPTIONS  s_req FOR e071-trkorr NO INTERVALS MODIF ID rnm OBLIGATORY.
+  SELECT-OPTIONS  s_req FOR e071-trkorr NO INTERVALS MODIF ID rnm OBLIGATORY.
 
-PARAMETERS      p_templ TYPE string OBLIGATORY LOWER CASE.
+  PARAMETERS      p_templ TYPE string OBLIGATORY LOWER CASE.
 
-PARAMETERS      p_lang  TYPE spras DEFAULT gc_default_lang OBLIGATORY.
+  PARAMETERS      p_lang  TYPE spras DEFAULT gc_default_lang OBLIGATORY.
 
 
 
@@ -2982,7 +2982,7 @@ SELECTION-SCREEN BEGIN OF BLOCK sb_output WITH FRAME TITLE sb_name2.
 
 
 
-PARAMETERS      p_path  TYPE string LOWER CASE OBLIGATORY.
+  PARAMETERS      p_path  TYPE string LOWER CASE OBLIGATORY.
 
 
 
@@ -14723,8 +14723,17 @@ CLASS zloc_cl_req_loader IMPLEMENTATION.
             APPEND INITIAL LINE TO lt_fields ASSIGNING <fs_field>.
 
             <fs_field>-name = <fs_dd03p>-fieldname.
+* { change 20220728
+            IF <fs_dd03p>-rollname IS NOT INITIAL.
+              <fs_field>-type ?= cl_abap_structdescr=>describe_by_name( <fs_dd03p>-rollname ).
+            ELSE.
+              DATA(lv_is_invalid) = abap_true.
+              EXIT.
+            ENDIF.
+* endchange 20220728 }
 
-            <fs_field>-type ?= cl_abap_structdescr=>describe_by_name( <fs_dd03p>-rollname ).
+
+
 
 
 
@@ -14782,6 +14791,11 @@ CLASS zloc_cl_req_loader IMPLEMENTATION.
 
           ENDLOOP.
 
+* { change 20220728
+            IF lv_is_invalid = abap_true.
+            EXIT.
+          ENDIF.
+* endchange 20220728 }
 
 
 * Table has no key fields (?!?)
@@ -15077,7 +15091,7 @@ CLASS zloc_cl_req_loader IMPLEMENTATION.
           IMPORTING
             et_e071       = me->t_e071
             et_e071k      = me->t_e071k
-            ).
+        ).
         CALL METHOD me->eject_inf_about_vdat
           EXPORTING
             iv_obj_type = iv_obj_type.
@@ -15090,7 +15104,7 @@ CLASS zloc_cl_req_loader IMPLEMENTATION.
           IMPORTING
             et_e071       = me->t_e071
             et_e071k      = me->t_e071k
-            ).
+        ).
         CALL METHOD me->eject_inf_about_vdat
           EXPORTING
             iv_obj_type = iv_obj_type.
@@ -15103,7 +15117,7 @@ CLASS zloc_cl_req_loader IMPLEMENTATION.
           IMPORTING
             et_e071       = me->t_e071
             et_e071k      = me->t_e071k
-            ).
+        ).
         CALL METHOD me->eject_inf_about_cdat
           EXPORTING
             iv_obj_type = iv_obj_type.
@@ -15116,7 +15130,7 @@ CLASS zloc_cl_req_loader IMPLEMENTATION.
           IMPORTING
             et_e071       = me->t_e071
             et_e071k      = me->t_e071k
-            ).
+        ).
         CALL METHOD me->eject_inf_about_tabu
           EXPORTING
             iv_obj_type = iv_obj_type.
